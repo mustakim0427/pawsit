@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
+import "stream-chat-react/dist/css/v2/index.css";
 import { AuthProvider, useAuth } from "./lib/auth";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,8 @@ function InnerApp() {
 	return <RouterProvider router={router} context={{ auth }} />;
 }
 
+import { Toaster } from "sonner";
+
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -43,6 +46,7 @@ if (!rootElement.innerHTML) {
 	root.render(
 		<StrictMode>
 			<QueryClientProvider client={queryClient}>
+				<Toaster position="top-center" richColors />
 				<AuthProvider>
 					<InnerApp />
 				</AuthProvider>

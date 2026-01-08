@@ -1,107 +1,157 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { signOutUser } from "../../lib/auth";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import * as z from "zod";
+import { useOwner, useCreateOwner } from "@/hooks/useOwner";
+import { Spinner } from "@/components/ui/spinner";
+import { InitialPopUpForm } from "@/components/InitialPopUpForm";
+
+import { Sidebar } from "@/components/dashboard/Sidebar";
+import { Header } from "@/components/dashboard/Header";
+import { FindSitters } from "@/components/dashboard/FindSitters";
+import { MyRequests } from "@/components/dashboard/MyRequests";
+import { Inbox } from "@/components/dashboard/Inbox";
+import { Settings } from "@/components/dashboard/Settings";
+
+const dashboardSearchSchema = z.object({
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  radius: z.number().optional(),
+  area: z.string().optional(),
+  filters: z.array(z.string()).optional().default(["All"]),
+  channelId: z.string().optional(),
+});
+
+type DashboardSearch = z.infer<typeof dashboardSearchSchema>;
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  validateSearch: (search) => dashboardSearchSchema.parse(search),
   component: Dashboard,
 });
 
 function Dashboard() {
   const { auth } = Route.useRouteContext();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const { data: owner, isPending: isOwnerLoading } = useOwner();
+  const createOwner = useCreateOwner();
+  const [activeTab, setActiveTab] = useState("dashboard");
+
+  // Sync activeTab with channelId search param
+  useEffect(() => {
+    if (search.channelId) {
+      setActiveTab("messages");
+    }
+  }, [search.channelId]);
+
+
+  // Derived search state from URL
+  const searchParams = search.area 
+    ? { area: search.area } 
+    : search.lat && search.lng 
+      ? { lat: search.lat, lng: search.lng, radius: search.radius || 5000 } 
+      : null;
+  const selectedRadius = (search.radius || 5000) / 1000;
+  const selectedFilters = search.filters || ["All"];
+
+  // Helper to update search params in URL
+  const updateSearch = (updates: Partial<DashboardSearch>) => {
+    navigate({
+      search: (prev) => ({ ...prev, ...updates }),
+      replace: true,
+    });
+  };
+
+  const handleConfirm = (data: { displayName: string; displayImage: string }) => {
+    createOwner.mutate(data);
+  };
+
+  if (isOwnerLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const showPopup = !owner;
+  const isSitter = !!owner?.isSitter;
+
+  const userName = owner?.displayName || auth.user?.name || "User";
+  const userImage = owner?.displayImage || auth.user?.image || "";
+  const userInitials = userName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  const renderSection = () => {
+    switch (activeTab) {
+      case "dashboard":
+        return (
+          <FindSitters
+            searchParams={searchParams}
+            setSearchParams={(params) => updateSearch({ 
+                lat: params?.lat, 
+                lng: params?.lng, 
+                radius: params?.radius,
+                area: params?.area 
+            })}
+            selectedRadius={selectedRadius}
+            setSelectedRadius={(radius) => updateSearch({ radius: radius ? radius * 1000 : undefined })}
+            selectedFilters={selectedFilters}
+            setSelectedFilters={(filters) => {
+              const newFilters = typeof filters === 'function' ? filters(selectedFilters) : filters;
+              updateSearch({ filters: newFilters });
+            }}
+
+          />
+        );
+      case "requests":
+        return <MyRequests setActiveTab={setActiveTab} />;
+      case "messages":
+        return <Inbox />;
+      case "profile":
+        return <Settings owner={owner} user={auth.user} />;
+      default:
+        return (
+          <FindSitters
+            searchParams={searchParams}
+            setSearchParams={(params) => updateSearch({ 
+                lat: params?.lat, 
+                lng: params?.lng, 
+                radius: params?.radius,
+                area: params?.area 
+            })}
+            selectedRadius={selectedRadius}
+            setSelectedRadius={(radius) => updateSearch({ radius: radius ? radius * 1000 : undefined })}
+            selectedFilters={selectedFilters}
+            setSelectedFilters={(filters) => {
+              const newFilters = typeof filters === 'function' ? filters(selectedFilters) : filters;
+              updateSearch({ filters: newFilters });
+            }}
+
+          />
+        );
+    }
+  };
 
   return (
-    <main className="h-screen bg-background overflow-hidden">
-      {/* Header */}
-      <header className="border-b border-border/40 bg-background">
-        <div className="flex items-center justify-between px-8 py-6">
-          <h1 className="text-2xl font-medium tracking-tight text-foreground">PetSit</h1>
-          <button className="px-4 py-2 text-sm font-medium rounded-lg bg-foreground text-background hover:opacity-90 transition-all">
-            <img src={auth.user?.image ?? "Not Image"} alt="avatar" />
-            Profile
-          </button>
-        </div>
-        <button onClick={signOutUser}>Sign Out</button>
-      </header>
+    <main className="flex h-screen bg-background text-foreground overflow-hidden">
+      {showPopup && <InitialPopUpForm onConfirm={handleConfirm} />}
 
-      {/* Main Content */}
-      <div className="px-8 py-12">
-        <div className="max-w-7xl mx-auto space-y-12">
-          {/* Welcome Section */}
-          <div className="space-y-2">
-            <h2 className="text-4xl font-medium tracking-tight text-foreground">Welcome back</h2>
-            <p className="text-muted-foreground">Here's what's happening with your pets today</p>
-          </div>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isSitter={isSitter} />
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Stat Card 1 */}
-            <div className="p-8 rounded-2xl border border-border/40 bg-background hover:border-border transition-all">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">Active Bookings</p>
-                <p className="text-5xl font-medium tracking-tight text-foreground">3</p>
-              </div>
-            </div>
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <Header
+          activeTab={activeTab}
+          userName={userName}
+          userImage={userImage}
+          userInitials={userInitials}
+        />
 
-            {/* Stat Card 2 */}
-            <div className="p-8 rounded-2xl border border-border/40 bg-background hover:border-border transition-all">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">Total Pets</p>
-                <p className="text-5xl font-medium tracking-tight text-foreground">2</p>
-              </div>
-            </div>
-
-            {/* Stat Card 3 */}
-            <div className="p-8 rounded-2xl border border-border/40 bg-background hover:border-border transition-all">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">Hours Booked</p>
-                <p className="text-5xl font-medium tracking-tight text-foreground">24</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="space-y-6">
-            <h3 className="text-2xl font-medium tracking-tight text-foreground">Recent Activity</h3>
-            <div className="space-y-4">
-              {/* Activity Item 1 */}
-              <div className="p-6 rounded-xl border border-border/40 bg-background hover:border-border transition-all">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">Booking confirmed for Max</p>
-                    <p className="text-sm text-muted-foreground">Tomorrow at 9:00 AM</p>
-                  </div>
-                  <span className="text-xs px-3 py-1 rounded-full bg-foreground/5 text-foreground font-medium">
-                    Upcoming
-                  </span>
-                </div>
-              </div>
-
-              {/* Activity Item 2 */}
-              <div className="p-6 rounded-xl border border-border/40 bg-background hover:border-border transition-all">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">Bella's sitting completed</p>
-                    <p className="text-sm text-muted-foreground">Yesterday at 6:00 PM</p>
-                  </div>
-                  <span className="text-xs px-3 py-1 rounded-full bg-foreground/5 text-foreground font-medium">
-                    Completed
-                  </span>
-                </div>
-              </div>
-
-              {/* Activity Item 3 */}
-              <div className="p-6 rounded-xl border border-border/40 bg-background hover:border-border transition-all">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">New message from sitter</p>
-                    <p className="text-sm text-muted-foreground">2 days ago</p>
-                  </div>
-                  <span className="text-xs px-3 py-1 rounded-full bg-foreground/5 text-foreground font-medium">
-                    Read
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth">
+          {renderSection()}
         </div>
       </div>
     </main>

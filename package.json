@@ -18,6 +18,7 @@
     "db:generate": "bun run --filter server db:generate",
     "db:migrate": "bun run --filter server db:migrate",
     "db:push": "bun run --filter server db:push",
+    "db:seed": "bun run --filter server db:seed",
     "db:studio": "bun run --filter server db:studio",
     "build": "turbo build",
     "build:client": "turbo build --filter=client",
@@ -35,6 +36,9 @@
     "monorepo",
     "turbo"
   ],
+  "dependencies": {
+    "drizzle-orm": "^0.45.0"
+  },
   "devDependencies": {
     "bun-types": "latest",
     "turbo": "^2.6.1"

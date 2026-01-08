@@ -1,18 +1,27 @@
 import { user } from "./auth.schema";
-import { pgTable, text, timestamp, boolean, index, integer, doublePrecision, varchar } from "drizzle-orm/pg-core";
+import {
+    pgTable,
+    text,
+    timestamp,
+    boolean,
+    index,
+    integer,
+    doublePrecision,
+    varchar,
+    geometry
+} from "drizzle-orm/pg-core";
 
 export const petSitterTable = pgTable("pet_sitter", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    userId: text("user_id").notNull().references(() => user.id),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
     displayName: varchar("display_name"),
     displayImage: varchar("display_image"),
     phoneNumber: text("phone_number").notNull(),
     headline: varchar("headline").notNull(),
     bio: varchar("bio"),
     address: varchar("address").notNull(),
-    city: varchar("city").notNull(),
-    latitude: doublePrecision("latitude").notNull(),
-    longitude: doublePrecision("longitude").notNull(),
+    area: varchar("area").notNull(),
+    location: geometry("location", { type: "Point", mode: "xy", srid: 4326 }).notNull(),
     experienceYears: integer("experience_years").default(0).notNull(),
     acceptsLargeDogs: boolean("accepts_large_dogs").default(false).notNull(),
     acceptsSmallDogs: boolean("accepts_small_dogs").default(false).notNull(),
@@ -30,15 +39,15 @@ export const petSitterTable = pgTable("pet_sitter", {
     totalReviews: integer("total_reviews").default(0).notNull(),
 }, (table) => [
     index("pet_sitter_userId_idx").on(table.userId),
+    index("pet_sitter_location_idx").using("gist", table.location),
 ]);
 
 export const serviceTable = pgTable("service", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id),
-    name: varchar("name").notNull(),
+    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id, { onDelete: 'cascade' }),
     serviceType: varchar("service_type").notNull(),
-    description: varchar("description").notNull(),
     pricePerDay: doublePrecision("price_per_day").notNull(),
+    totalEarning: doublePrecision("total_earning").default(0).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -48,10 +57,9 @@ export const serviceTable = pgTable("service", {
 
 export const sitterAvailabilityTable = pgTable("sitter_availability", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id),
-    availableFrom: timestamp("available_from").notNull(),
-    availableTo: timestamp("available_to").notNull(),
-    isBlocked: boolean("is_blocked").default(false).notNull(),
+    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id, { onDelete: 'cascade' }),
+    isAvailable: boolean("is_available").default(true).notNull(),
+    isBanned: boolean("is_banned").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
         .$onUpdate(() => /* @__PURE__ */ new Date())
@@ -60,7 +68,7 @@ export const sitterAvailabilityTable = pgTable("sitter_availability", {
 
 export const sitterPhotoTable = pgTable("sitter_photo", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id),
+    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id, { onDelete: 'cascade' }),
     imageUrl: varchar("image_url").notNull(),
     photoType: varchar("photo_type").notNull(),
     caption: varchar("caption"),
@@ -72,15 +80,14 @@ export const sitterPhotoTable = pgTable("sitter_photo", {
 
 export const petOwnerTable = pgTable("pet_owner", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    userId: text("user_id").notNull().references(() => user.id),
-    displayName: varchar("display_name"),
-    displayImage: varchar("display_image"),
-    phoneNumber: text("phone_number").notNull(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+    displayName: varchar("display_name").notNull(),
+    displayImage: varchar("display_image").notNull(),
+    phoneNumber: text("phone_number"),
     bio: varchar("bio"),
-    address: varchar("address").notNull(),
-    city: varchar("city").notNull(),
-    latitude: doublePrecision("latitude").notNull(),
-    longitude: doublePrecision("longitude").notNull(),
+    address: varchar("address"),
+    area: varchar("area"),
+    location: geometry("location", { type: "Point", mode: "xy", srid: 4326 }).notNull(),
     isSitter: boolean("is_sitter").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -92,7 +99,7 @@ export const petOwnerTable = pgTable("pet_owner", {
 
 export const petImageTable = pgTable("pet_image", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id),
+    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id, { onDelete: 'cascade' }),
     imageUrl: varchar("image_url").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -102,12 +109,10 @@ export const petImageTable = pgTable("pet_image", {
 
 export const bookingTable = pgTable("booking", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id),
-    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id),
+    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id, { onDelete: 'cascade' }),
+    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id, { onDelete: 'cascade' }),
     serviceId: integer("service_id").notNull().references(() => serviceTable.id),
-    startDate: timestamp("start_date").notNull(),
-    endDate: timestamp("end_date").notNull(),
-    status: varchar("status").notNull().default("pending"),
+    isAccepted: boolean("is_accepted").default(false).notNull(),
     totalPrice: doublePrecision("total_price").notNull(),
     specialRequest: varchar("special_request"),
     bookingCode: varchar("booking_code").notNull(),
@@ -122,7 +127,7 @@ export const bookingTable = pgTable("booking", {
 
 export const paymentTable = pgTable("payment", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    bookingId: integer("booking_id").notNull().references(() => bookingTable.id),
+    bookingId: integer("booking_id").notNull().references(() => bookingTable.id, { onDelete: 'cascade' }),
     amount: doublePrecision("amount").notNull(),
     paymentMethod: varchar("payment_method").notNull(),
     paymentStatus: varchar("payment_status").notNull().default("pending"),
@@ -136,9 +141,9 @@ export const paymentTable = pgTable("payment", {
 
 export const reviewTable = pgTable("review", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    bookingId: integer("booking_id").notNull().references(() => bookingTable.id),
-    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id),
-    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id),
+    bookingId: integer("booking_id").references(() => bookingTable.id, { onDelete: 'set null' }),
+    sitterId: integer("sitter_id").notNull().references(() => petSitterTable.id, { onDelete: 'cascade' }),
+    ownerId: integer("owner_id").notNull().references(() => petOwnerTable.id, { onDelete: 'cascade' }),
     rating: integer("rating").notNull(),
     reviewText: varchar("review_text"),
     sitterResponse: varchar("sitter_response"),
@@ -153,8 +158,8 @@ export const reviewTable = pgTable("review", {
 
 export const reportTable = pgTable("report", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    reporterId: text("reporter_id").notNull().references(() => user.id),
-    reporteeId: text("reportee_id").notNull().references(() => user.id),
+    reporterId: text("reporter_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+    reporteeId: text("reportee_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
     reportType: varchar("report_type").notNull(),
     description: varchar("description").notNull(),
     status: varchar("status").notNull().default("pending"),
@@ -168,9 +173,10 @@ export const reportTable = pgTable("report", {
 
 export const notificationTable = pgTable("notification", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    userId: text("user_id").notNull().references(() => user.id),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
     type: varchar("type").notNull(),
     content: varchar("content").notNull(),
+    isRead: boolean("is_read").default(false).notNull(),
     sendToEmail: boolean("send_to_email").default(true).notNull(),
     sendToPhone: boolean("send_to_phone").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -178,4 +184,3 @@ export const notificationTable = pgTable("notification", {
         .$onUpdate(() => /* @__PURE__ */ new Date())
         .notNull(),
 });
-
